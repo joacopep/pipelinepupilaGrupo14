@@ -1,0 +1,156 @@
+# Configuración del pipeline. Para procesar un video nuevo, cambiar solo video_path (o pasar la ruta a run.py).
+# Rutas relativas: respecto de la carpeta del proyecto.
+
+video_path: data/video.mov
+output_dir: outputs              # las salidas quedan en output_dir/<nombre del video>/
+
+# Diámetro de iris de referencia para convertir px -> mm
+iris_diameter_mm: 11.7
+
+# Detección del ojo y del iris, seguimiento y ROI normalizada (src/roi.py)
+roi:
+  # --- Rendimiento ---
+  deteccion_lado_max: 1280       # la detección se hace sobre el frame reducido a este lado mayor [px];
+                                 # la ROI se recorta del frame original a resolución completa
+  # --- Detección de cara y ojos (clasificadores Haar de OpenCV) ---
+  detect_width: 640              # ancho de trabajo [px] para la búsqueda; el frame se reescala a este ancho
+  cascade_scale_factor: 1.1
+  cascade_min_neighbors: 5
+  face_min_frac: 0.15            # lado mínimo de la cara, fracción del ancho del frame
+  eye_search_height_frac: 0.6    # fracción superior de la cara donde se buscan los ojos
+  eye_min_frac: 0.12             # lado del ojo, fracción del ancho de la cara (mín / máx)
+  eye_max_frac: 0.4
+  eye_alone_min_frac: 0.2        # sin cara (primer plano): lado mínimo del ojo, fracción del lado corto del frame
+  eye: auto                      # auto (caja más grande) | izquierdo | derecho (lado en la imagen)
+  rotaciones: [0, 90, 270, 180]  # rotaciones [grados antihorarios] en las que se busca la cara, en orden
+  track_radius_tol: 0.25         # seguimiento: radio del iris aceptado, +-25 % del radio de referencia del video
+  scale_window_s: 1.0            # la escala de la ROI se fija con la mediana del iris en este tramo inicial [s]
+  init_consensus_dist: 0.5       # consenso inicial: dos detecciones coinciden si sus centros distan menos de 0.5 radios
+  init_min_support: 0.2          # consenso inicial: una detección de caja de ojo gana si la confirma >= 20 % de la ventana
+  redetect_max_jump: 2.0         # re-detección con ROI previa: el centro puede moverse hasta 2 radios de iris
+
+  # --- Localización del iris (Hough) dentro de la caja del ojo ---
+  iris_work_size: 200            # la caja del ojo se reescala a este lado [px] antes de Hough
+  iris_channel: R                # R (iris oscuro frente a esclera y piel) | gris
+  iris_blur_sigma_frac: 0.01     # sigma del suavizado gaussiano, fracción de iris_work_size
+  iris_radius_frac: [0.12, 0.25] # radio del iris, fracción del lado de la caja del ojo (mín, máx)
+  iris_radius_frac_frame: [0.08, 0.45]  # ídem, relativo al cuadrado central del frame (primer plano sin cara)
+  # Último recurso cuando Haar no encuentra ninguna caja de ojo: además del cuadrado central, ventanas de este lado
+  # (fracción del lado corto del frame) repartidas por todo el frame con paso de medio lado; en cada una el iris se busca
+  # con iris_radius_frac, como en una caja de ojo. [] = solo el cuadrado central
+  ventanas_lado_frac: [0.5]
+  hough_canny_high: 60           # umbral alto de Canny interno de Hough
+  hough_acc_threshold: 15        # votos mínimos en el acumulador
+  hough_min_dist_frac: 0.1       # distancia mínima entre centros candidatos, fracción de iris_work_size
+  hough_max_candidates: 5        # círculos de Hough por caja que se evalúan
+  iris_score_arc_deg: 45         # semiancho de los arcos laterales donde se mide el contraste del borde
+  iris_score_delta: 0.15         # el contraste se mide entre r*(1-delta) y r*(1+delta)
+  # Seguimiento robusto a reflejos: desactivado con estos valores (256, .inf, .inf). Para activarlo:
+  # iris_reflejo_nivel 240, iris_reflejo_k_mad 3.0 y seguimiento_vel_max_radios_s 10.0.
+  iris_reflejo_nivel: 256        # seguimiento: en cada anillo del contraste se descartan las muestras >= este nivel...
+  iris_reflejo_k_mad: .inf       # ...y las más claras que la mediana del anillo + k MAD (reflejos de la lámpara)
+  seguimiento_vel_max_radios_s: .inf   # el centro del iris no se mueve más que esto entre dos ROIs con iris; .inf = sin límite
+  seguimiento_salto_min_radios: 0.1   # mínimo, para frames muy seguidos
+
+  # --- ROI normalizada ---
+  side_iris_diameters: 2.5       # lado de la ROI, en diámetros de iris
+  size: 512                      # lado [px] de la ROI normalizada
+
+# Segmentación de la pupila (src/segment.py). Tamaños en radios (*_r_iris, *_iris) o diámetros (*_iris_frac) de iris de
+# la ROI normalizada.
+segmentacion:
+  preprocesamiento:
+    canal: R
+    percentiles: [1, 99]         # estiramiento lineal: f1, f2 = percentiles dentro del disco del iris...
+    disco_r_iris: 0.9            # ...de este radio (calculados en cada frame)
+    mediana_iris_frac: 0.12      # lado de la mediana contra los reflejos
+  busqueda_r_iris: 0.8           # la pupila se busca dentro de este disco (la más dilatada mide ~0.7 radios de iris)
+  watershed:
+    reflejo_k_mad: 5.0           # reflejo = más claro que mediana + k * MAD de la región (imagen sin mediana)
+    reflejo_dil_iris_frac: 0.02  # dilatación del reflejo (halo)
+    centro_sigma_iris_frac: 0.1  # suavizado para ubicar el punto más oscuro (centro del marcador de pupila)...
+    centro_r_iris: 0.5           # ...buscado a menos de esta distancia del centro del iris
+    marcador_pupila_iris: 0.1    # radio del marcador de pupila
+    fondo_percentil: 75          # marcador de fondo: píxeles más claros que este percentil de la región...
+    fondo_dist_iris: 0.3         # ...a más de esta distancia del marcador de pupila
+  componente:
+    diam_min_iris: 0.15          # diámetro equivalente admisible de la pupila (fracción del diámetro del iris)
+    diam_max_iris: 0.8
+    peso_distancia: 0.5          # puntaje = circularidad - peso * distancia al centro del iris [radios de iris]
+    envolvente_convexa: true     # la pupila es convexa: la envolvente recupera las muescas de los reflejos del borde
+  calidad:                       # indicador por frame: confiable si cumple todo (si no, diámetro = NaN)
+    # Elipse por RANSAC sobre el contorno de la componente (antes de la envolvente)
+    umbral_iris: 0.02            # un punto encaja si está a menos de esto de la elipse [radios de iris]
+    iteraciones: 300
+    semilla: 0
+    eje_min: 0.6                 # b/a mínimo de una elipse candidata
+    diam_iris_ransac: [0.15, 0.8]   # diámetro admisible de la elipse candidata [diámetros de iris]
+    residuo_trunc_iris: 0.1      # el residuo trunca cada distancia en este valor [radios de iris]
+    min_puntos: 20               # puntos del contorno mínimos para ajustar
+    margen_region_iris: 0.03     # se descartan puntos a menos de esto del borde de la región de búsqueda
+    excluir_reflejo_iris_frac: 0.02   # y los que están a menos de esto de un reflejo [diámetros de iris]
+    # Umbrales
+    inliers_min: 0.4             # fracción de puntos del contorno sobre la elipse
+    residuo_max: 0.15            # RMS de la distancia a la elipse / radio equivalente
+    circularidad_min: 0.65       # 4 pi A / P^2 de la componente (un derrame la baja)
+    diam_iris_min: 0.2           # tamaño respecto del iris [diámetros de iris] (pupila de ~2.3 a ~8.8 mm)
+    diam_iris_max: 0.75
+  continuidad:                   # segunda pasada con la última pupila aceptada como referencia (segment.restriccion_previa)
+    usar: false                  # desactivada
+    vigencia_s: 1.0              # la pupila de referencia es la última aceptada en este tiempo previo [s]
+    radio_tol: 0.25              # radio admisible: r_previo (1 +- radio_tol)...
+    vel_radio_iris_s: 0.45       # ...+- esto por segundo transcurrido [radios de iris/s]
+    centro_tol_iris: 0.1         # el centro del marcador, a menos de esto del centro previo [radios de iris]...
+    vel_centro_iris_s: 0.5       # ...+- esto por segundo transcurrido
+    marcador_rel: 0.5            # radio del marcador de pupila: a lo sumo esta fracción del radio mínimo admisible
+    margen_borde_iris: 0.03      # puntos del contorno a menos de esto del borde de la restricción: no cuentan [radios de iris]
+  calidad_media:                 # segundo nivel (confianza media), solo para fases que el indicador rechaza enteras
+    inliers_min: 0.3
+    residuo_max: 0.2
+    circularidad_min: 0.5
+
+# Curva temporal del diámetro (src/features.py). Tiempos en segundos reales.
+curva:
+  procesos: 0                    # procesos para la segmentación (0 = todos los núcleos)
+  # Atípicos temporales: filtro de Hampel
+  hampel_ventana_s: 0.2          # semiancho de la ventana [s]
+  hampel_n_sigmas: 3.0           # atípico si |d - mediana| > n * 1.4826 * MAD de la ventana
+  # Parpadeos
+  parpadeo_min_s: 0.1            # tramo sin medición (sin iris o sin pupila) de al menos esto = parpadeo
+  parpadeo_caida_area: 0.25      # o caída transitoria del área de más de esta fracción respecto de la mediana...
+  parpadeo_ventana_s: 0.5        # ...de los 0.5 s anteriores y también de la de los 0.5 s posteriores
+  parpadeo_margen_s: 0.1         # el parpadeo se extiende esto a cada lado (párpado bajando y subiendo)
+  # Interpolación
+  hueco_max_s: 0.25              # huecos (NaN) de hasta esto se interpolan; los más largos quedan NaN
+  # Degradación: en cada fase (antes / después del estímulo) se aceptan los frames del nivel más alto (alta = indicador
+  # estricto, media = segmentacion.calidad_media, baja = cualquier medición) que cubre al menos esta fracción de la fase
+  fase_min_frac: 0.25
+  # Suavizado para derivar (Butterworth de fase cero)
+  fc_hz: 3.0
+  butter_orden: 2
+
+# Parámetros fisiológicos (src/features.py). Ventanas relativas al estímulo detectado [s].
+parametros:
+  basal_s: 2.0                   # basal (inicial) = mediana de la curva suavizada en [estímulo - basal_s, estímulo)
+  partida_s: [0.1, 0.18]         # nivel de partida de la latencia: la luz ya cambió y la pupila todavía no reaccionó
+                                 # (latencia fisiológica > 0.18 s); evita el salto de la medición en el frame del estímulo
+  respuesta_s: 3.0               # extremo y velocidad máxima: en (estímulo + partida_s[1], estímulo + respuesta_s]
+  redilatacion_s: 3.0            # luz ON: velocidad de redilatación en los 3 s posteriores al mínimo
+  final_s: 3.0                   # final = mediana en los últimos final_s del registro (luz OFF: amplitud = final - inicial)
+  umbral_n_sigmas: 3.0           # latencia por umbral: el cambio supera max(n * desvío robusto del basal, ...
+  umbral_frac_amplitud: 0.05     # ... esta fracción de la amplitud)
+  # Confianza de la latencia: baja si la tangente y el umbral difieren en más de esto o si cae fuera del rango fisiológico
+  latencia_discrepancia_max_s: 0.15
+  latencia_rango_s: [0.18, 0.8]
+  vel_constriccion_max_mm_s: 6.0 # velocidades fuera de rango fisiológico (constricción ~2-5 mm/s, redilatación ~0.5-2
+  vel_redilatacion_max_mm_s: 3.0 # mm/s): confianza baja
+  # Velocidad de la fase de respuesta por modelo (principal): sigmoide logística ajustada a la curva limpia (sin suavizar);
+  # velocidad máxima = pendiente en el punto medio. La velocidad por derivada queda como referencia (*_derivada_mm_s)
+  modelo_min_puntos: 8           # muestras mínimas en la ventana del ajuste (si no, la derivada con confianza baja)
+  modelo_s_s: [0.02, 1.5]        # escala temporal s de la sigmoide [s]
+  modelo_f_scale_mm: 0.1         # pérdida soft L1: los residuos de más de ~0.1 mm (ruido de un frame) pesan menos
+  modelo_r2_min: 0.8             # ajuste con R² menor: confianza baja
+  # Respaldo: si la ventana de respuesta no tiene curva después de todos los niveles de confianza, los parámetros
+  # principales se estiman igual con las mediciones disponibles, con confianza baja (nunca NaN si hay datos)
+  respaldo_min_puntos: 4         # mediciones mínimas en la ventana (si no, el crudo; si no, todo lo posterior al estímulo)
+  respaldo_percentil: 10         # sin ajuste: extremo = percentil 10 (luz ON) o 90 (luz OFF) de las mediciones

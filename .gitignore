@@ -1,0 +1,21 @@
+# Entorno virtual
+.venv/
+venv/
+
+# Salidas generadas
+outputs/
+
+# Videos (en cualquier carpeta)
+data/
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.avi
+*.AVI
+*.mkv
+*.m4v
+
+# Python
+__pycache__/
+*.py[cod]

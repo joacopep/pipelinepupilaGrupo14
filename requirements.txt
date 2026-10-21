@@ -1,0 +1,8 @@
+# Dependencias de run.py (Python 3.13). Versiones fijadas: en Windows con Smart App Control, releases muy recientes de
+# numpy/scipy fueron bloqueadas por el sistema.
+numpy==2.2.6
+opencv-python==4.12.0.88
+scikit-image==0.25.2
+scipy==1.16.3
+pandas==2.3.3
+pyyaml==6.0.3
