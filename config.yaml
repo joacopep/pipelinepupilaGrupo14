@@ -1,7 +1,9 @@
 # Configuración del pipeline. Para procesar un video nuevo, cambiar solo video_path (o pasar la ruta a run.py).
 # Rutas relativas: respecto de la carpeta del proyecto.
 
-video_path: data/video.mov
+# Ruta del video a procesar (absoluta o relativa a esta carpeta).
+# También se puede pasar como argumento: python run.py ruta/al/video.mov
+video_path: video.mov
 output_dir: outputs              # las salidas quedan en output_dir/<nombre del video>/
 
 # Diámetro de iris de referencia para convertir px -> mm

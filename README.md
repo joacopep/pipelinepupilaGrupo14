@@ -20,15 +20,11 @@ pip install -r requirements.txt
 
 ## Cómo procesar un video
 
-```
-python run.py ruta/al/video.mov
-```
-
-Si no se pasa la ruta, se usa `video_path` de `config.yaml` (relativa a la carpeta del proyecto, o absoluta):
-
-```
-python run.py
-```
+1. Copiá el video a la carpeta del proyecto.
+2. Corré el pipeline de una de estas dos formas:
+   - Pasando el nombre del video: `python run.py nombre_del_video.mov`
+   - O escribiendo el nombre en `video_path` dentro de `config.yaml` y corriendo `python run.py`
+3. Los resultados (`curva.csv` y `parametros.csv`) quedan en una subcarpeta con el nombre del video, dentro de la carpeta indicada por `output_dir` en `config.yaml`.
 
 La salida queda en `outputs/<nombre del video sin extensión>/`: `curva.csv` y `parametros.csv`. Al terminar se imprime un
 resumen de los parámetros principales. Un video 4K de 30 s tarda del orden de 1 a 3 minutos. Si el video no existe, `run.py`
